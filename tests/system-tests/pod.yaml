@@ -1,0 +1,28 @@
+# ---------------------------------------------------------------------------- #
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  labels:
+    pav-test-object: ''
+spec:
+  restartPolicy: Never
+  containers:
+    - name: container
+      image: ubuntu:20.04
+      command:
+        - /bin/bash
+        - -c
+        - |
+          [[ "$( cat /volume/greeting )" = 'Hello, world!' ]] &&
+          [[ "$( cat /volume/pvc-name )" = my-pvc ]]
+      volumeMounts:
+        - name: volume
+          mountPath: /volume
+  volumes:
+    - name: volume
+      persistentVolumeClaim:
+        claimName: my-pvc
+
+# ---------------------------------------------------------------------------- #

@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------- #
+
+# Must first have available a PersistentVolumeClaim named "crypt-underlying-pvc"
+# in namespace "default" corresponding to a block volume.
+
+# ALL DATA ON THE crypt-underlying-pvc PersistentVolumeClaim WILL BE LOST ONCE
+# THE crypt-wrapping-pvc PersistentVolumeClaim BELOW IS CREATED!
+
+# ---------------------------------------------------------------------------- #
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: crypt-storage-class
+provisioner: crypt-provisioner
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: crypt-secret
+stringData:
+  passphrase: my-passphrase
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crypt-wrapping-pvc
+  annotations:
+    crypt/underlyingClaimName: crypt-underlying-pvc
+    crypt/secretName: crypt-secret
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1
+  storageClassName: crypt-storage-class
+
+---
+
+# Exec into this pod and check the /volume block device.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: crypt-test-pod
+spec:
+  terminationGracePeriodSeconds: 0  # ensure that the pod can be deleted quickly
+  containers:
+    - name: container
+      image: ubuntu:20.04
+      command: [ sleep, infinity ]  # wait until pod is manually deleted
+      volumeDevices:
+        - name: volume
+          devicePath: /volume
+  volumes:
+    - name: volume
+      persistentVolumeClaim:
+        claimName: crypt-wrapping-pvc
+
+# ---------------------------------------------------------------------------- #

@@ -1,0 +1,158 @@
+# ---------------------------------------------------------------------------- #
+
+# Template definitions of all objects other than CSIDriver that are created when
+# a PavProvisioner is created.
+
+# This file is loaded as a string, then formatted using Python's str.format(),
+# and finally parsed as YAML.
+
+# ---------------------------------------------------------------------------- #
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {provisioner.metadata.name}
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-controller-plugin
+  namespace: {provisioner.metadata.name}
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {provisioner.metadata.name}.csi-controller-plugin
+subjects:
+  - kind: ServiceAccount
+    name: csi-controller-plugin
+    namespace: {provisioner.metadata.name}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pav-csi-controller-plugin
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: csi-controller-plugin
+  namespace: {provisioner.metadata.name}
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &labels
+      pav.albertofaria.github.io/component: csi-controller-plugin
+      pav.albertofaria.github.io/provisioner-uid: {provisioner.metadata.uid}
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: csi-controller-plugin
+      containers:
+        - name: csi-plugin
+          image: {image}
+          args:
+            - csi-plugin
+            - {provisioner.metadata.name}
+            - controller
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: external-provisioner
+          image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.1
+          args:
+            - --csi-address=/csi/socket
+            - --extra-create-metadata  # to get PV & PVC info in CreateVolume()
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+      volumes:
+        - name: socket-dir
+          emptyDir:
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-node-plugin
+  namespace: {provisioner.metadata.name}
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {provisioner.metadata.name}.csi-node-plugin
+subjects:
+  - kind: ServiceAccount
+    name: csi-node-plugin
+    namespace: {provisioner.metadata.name}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pav-csi-node-plugin
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: csi-node-plugin
+  namespace: {provisioner.metadata.name}
+spec:
+  selector:
+    matchLabels: &labels
+      pav.albertofaria.github.io/component: csi-node-plugin
+      pav.albertofaria.github.io/provisioner-uid: {provisioner.metadata.uid}
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: csi-node-plugin
+      containers:
+        - name: csi-plugin
+          image: {image}
+          args:
+            - csi-plugin
+            - {provisioner.metadata.name}
+            - node
+            - $(NODE_NAME)
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: node-driver-registrar
+          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.2.0
+          args:
+            - --csi-address=/csi/socket
+            - --kubelet-registration-path=/var/lib/kubelet/plugins/{provisioner.metadata.name}/socket
+          volumeMounts:
+            - name: registration-dir
+              mountPath: /registration
+            - name: socket-dir
+              mountPath: /csi
+      volumes:
+        # where node-driver-registrar registers the plugin with kubelet
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+        # where the socket for kubelet <--> plugin communication is created
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/{provisioner.metadata.name}
+            type: DirectoryOrCreate
+
+# ---------------------------------------------------------------------------- #

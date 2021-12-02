@@ -1,0 +1,11 @@
+# ---------------------------------------------------------------------------- #
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: my-sc
+  labels:
+    pav-test-object: ''
+provisioner: my-provisioner
+
+# ---------------------------------------------------------------------------- #

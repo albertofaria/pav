@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------- #
+
+# Yamale schema for validating PavProvisioner objects.
+
+# This file is loaded as a string, then formatted using Python's str.format(),
+# and finally parsed as YAML. The {template} pattern will evaluate to
+# "include('template')," if Jinja templates are to be allowed.
+
+# ---------------------------------------------------------------------------- #
+
+apiVersion: any()
+kind: any()
+metadata: include('metadata', strict=False)
+spec:
+  provisioningModes: list(regex('^(Dynamic|Static)$'), min=1)
+  volumeValidation: any({template} include('volumeValidation'), required=False)
+  volumeCreation: any({template} include('volumeCreation'), required=False)
+  volumeDeletion: any({template} include('volumeDeletion'), required=False)
+  volumeStaging: any({template} include('volumeStaging'))
+  volumeUnstaging: any({template} include('volumeUnstaging'), required=False)
+status: any(required=False)
+
+---
+
+metadata:
+  name: regex('^[A-Za-z0-9]([A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?$')
+
+volumeValidation:
+  volumeModes: any({template} list(regex('^(Filesystem|Block)$'), min=1),
+    required=False)
+  accessModes: any({template} list(regex(
+    '^(ReadWriteOnce|ReadOnlyMany|ReadWriteMany)$'), min=1), required=False)
+  minCapacity: any({template} include('capacity'), required=False)
+  maxCapacity: any({template} include('capacity'), required=False)
+  podTemplate: any({template} include('podTemplate'), required=False)
+
+volumeCreation:
+  handle: any({template} str(min=1), required=False)
+  capacity: any({template} include('capacity'), required=False)
+  podTemplate: any({template} include('podTemplate'), required=False)
+
+volumeDeletion:
+  podTemplate: any({template} include('podTemplate'), required=False)
+
+volumeStaging:
+  podTemplate: any({template} include('podTemplate'))
+
+volumeUnstaging:
+  podTemplate: any({template} include('podTemplate'), required=False)
+
+capacity: any(int(min=1), regex('^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$'))
+
+podTemplate: map()
+
+template: str()
+
+# ---------------------------------------------------------------------------- #

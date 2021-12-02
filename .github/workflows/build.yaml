@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------- #
+
+name: build  # the name is mostly to look good on status badges
+on:
+  - push
+  - pull_request
+
+jobs:
+
+  run-linters-and-unit-tests:
+
+    name: Run linters and unit tests
+    runs-on: ubuntu-20.04
+
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Run linters and unit tests
+        run: tests/run-linters-and-unit-tests.bash
+
+# ---------------------------------------------------------------------------- #

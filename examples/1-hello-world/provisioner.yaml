@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------------------- #
+
+apiVersion: pav.albertofaria.github.io/v1alpha1
+kind: PavProvisioner
+metadata:
+  name: hello-world-provisioner
+spec:
+  provisioningModes:
+    - Dynamic
+  volumeCreation:
+    capacity: "{{ requestedMinCapacity }}"  # advertise requested capacity
+  volumeStaging:
+    podTemplate:
+      spec:
+        restartPolicy: Never  # don't restart container after creating volume
+        containers:
+          - name: container
+            image: ubuntu:20.04
+            command:
+              - /bin/bash
+              - -c
+              - mkdir /pav/volume && echo "Hello world!" > /pav/volume/greeting
+
+# ---------------------------------------------------------------------------- #

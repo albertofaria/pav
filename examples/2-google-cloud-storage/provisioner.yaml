@@ -1,0 +1,127 @@
+# ---------------------------------------------------------------------------- #
+
+apiVersion: pav.albertofaria.github.io/v1alpha1
+kind: PavProvisioner
+metadata:
+  name: gcs-provisioner
+spec:
+  provisioningModes:
+    - Dynamic
+    - Static
+  volumeCreation:
+    capacity: 1Ei  # buckets are conceptually infinite
+    podTemplate:
+      metadata:
+        namespace: "{{ params.secretNamespace }}"
+      spec:
+        restartPolicy: Never
+        containers:
+          - &gsutil-container
+            name: gsutil
+            image: albertofaria/gsutil:5.2
+            command:
+              - /bin/bash
+              - -c
+              - |
+                gsutil "$@" mb \
+                  -b on \
+                  -c {{ params.storageClass | default('STANDARD') | tobash }} \
+                  -l {{ params.location | default('US') | tobash }} \
+                  {% if params.retentionPeriod is defined %}
+                  --retention {{ params.retentionPeriod | tobash }} \
+                  {% endif %}
+                  gs://{{ defaultHandle | tobash }} \
+                  2> /pav/error
+            args:
+              - bash
+              - -o
+              - Credentials:gs_service_key_file=/secret/key
+              - -o
+              - GSUtil:default_project_id={{ params.projectId }}
+            volumeMounts:
+              - &secret-volume-mount
+                name: secret
+                mountPath: /secret
+                readOnly: true
+        volumes:
+          - &secret-volume
+            name: secret
+            secret:
+              secretName: "{{ params.secretName }}"
+              items:
+                - key: key
+                  path: key
+  volumeDeletion:
+    podTemplate:
+      metadata:
+        namespace: "{{ params.secretNamespace }}"
+      spec:
+        restartPolicy: Never
+        containers:
+          - <<: *gsutil-container
+            command:
+              - /bin/bash
+              - -c
+              - |
+                gsutil "$@" rm -r gs://{{ defaultHandle | tobash }} 2> /pav/error ||
+                  grep 'bucket does not exist' /pav/error
+        volumes:
+          - *secret-volume
+  volumeStaging:
+    podTemplate:
+      metadata:
+        namespace: "{{ params.secretNamespace }}"
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: gcsfuse
+            image: albertofaria/gcsfuse:0.36.0
+            command:
+              - /bin/bash
+              - -c
+              - |
+                {% set defaultCacheTtl = '0' if 'ReadWriteMany' in accessModes else '1m0s' %}
+                set -o errexit
+                # mount the bucket
+                mkdir /pav/volume
+                gcsfuse \
+                  -o allow_other \
+                  --key-file /secret/key \
+                  --temp-dir /scratch \
+                  {% if params.billingProjectId is defined %}
+                  --billing-project {{ params.billingProjectId | tobash }} \
+                  {% endif %}
+                  --uid 0 \
+                  --gid 0 \
+                  --dir-mode {{ params.dirMode | default('777') | tobash }} \
+                  --file-mode {{ params.fileMode | default('666') | tobash }} \
+                  {% if params.implicitDirs %}
+                  --implicit-dirs \
+                  {% endif %}
+                  --rename-dir-limit {{ params.renameDirLimit | default('0') | tobash }} \
+                  --limit-bytes-per-sec {{ params.limitBytesPerSec | default('-1') | tobash }} \
+                  --limit-ops-per-sec {{ params.limitOpsPerSec | default('-1') | tobash }} \
+                  --max-retry-sleep {{ params.maxRetrySleep | default('1m0s') | tobash }} \
+                  --stat-cache-capacity {{ params.statCacheCapacity | default('4096') | tobash }} \
+                  --stat-cache-ttl {{ params.statCacheTtl | default(defaultCacheTtl) | tobash }} \
+                  --type-cache-ttl {{ params.typeCacheTtl | default(defaultCacheTtl) | tobash }} \
+                  {{ handle | tobash }} \
+                  /pav/volume \
+                  2> /pav/error
+                touch /pav/ready
+                # wait until the container is asked to terminate
+                sleep infinity &
+                trap "kill %1" TERM
+                wait || true
+            securityContext:
+              privileged: true
+            volumeMounts:
+              - *secret-volume-mount
+              - name: scratch
+                mountPath: /scratch
+        volumes:
+          - *secret-volume
+          - name: scratch
+            emptyDir: {}
+
+# ---------------------------------------------------------------------------- #

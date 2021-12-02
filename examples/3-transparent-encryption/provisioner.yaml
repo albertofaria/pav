@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------------------- #
+
+apiVersion: pav.albertofaria.github.io/v1alpha1
+kind: PavProvisioner
+metadata:
+  name: crypt-provisioner
+spec:
+  provisioningModes:
+    - Dynamic
+  volumeValidation:
+    volumeModes:
+      - Block
+  volumeCreation:
+    podTemplate:
+      metadata:
+        namespace: "{{ pvc.metadata.namespace }}"
+      spec: &cryptsetup-pod-spec
+        restartPolicy: Never
+        containers:
+          - &cryptsetup-container
+            name: cryptsetup
+            image: albertofaria/cryptsetup:2.4.1
+            command:
+              - /bin/bash
+              - -c
+            args:
+              - |
+                set -o errexit
+                cryptsetup -q luksFormat /volume /secret/passphrase
+                size="$( blockdev --getsize64 /volume )"
+                offset="$( cryptsetup luksDump --dump-json-metadata /volume |
+                  jq '.segments."0".offset' | tr -d '"' )"
+                echo "$(( size - offset ))" > /pav/capacity
+            securityContext:
+              privileged: true
+            volumeMounts:
+              - name: secret
+                mountPath: /secret
+                readOnly: true
+            volumeDevices:
+              - name: underlying
+                devicePath: /volume
+        volumes:
+          - name: secret
+            secret:
+              secretName: "{{ pvc.metadata.annotations['crypt/secretName'] }}"
+          - name: underlying
+            persistentVolumeClaim:
+              claimName: "{{ pvc.metadata.annotations['crypt/underlyingClaimName'] }}"
+  volumeDeletion:
+    podTemplate:
+      metadata:
+        namespace: "{{ pvc.metadata.namespace }}"
+      spec:
+        <<: *cryptsetup-pod-spec
+        containers:
+          - <<: *cryptsetup-container
+            args:
+              - "! cryptsetup isLuks /volume || cryptsetup -q erase /volume"
+  volumeStaging:
+    podTemplate:
+      metadata:
+        namespace: "{{ pvc.metadata.namespace }}"
+      spec:
+        <<: *cryptsetup-pod-spec
+        containers:
+          - <<: *cryptsetup-container
+            args:
+              - |
+                set -o errexit
+                dev={{ handle | tobash }}
+                cryptsetup open /volume "$dev" --key-file /secret/passphrase
+                cp -p "/dev/mapper/$dev" /pav/volume
+  volumeUnstaging:
+    podTemplate:
+      metadata:
+        namespace: "{{ pvc.metadata.namespace }}"
+      spec:
+        <<: *cryptsetup-pod-spec
+        containers:
+          - <<: *cryptsetup-container
+            args:
+              - "cryptsetup close {{ handle | tobash }} || (( $? == 4 ))"
+
+# ---------------------------------------------------------------------------- #

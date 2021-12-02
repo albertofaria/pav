@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------- #
+
+apiVersion: pav.albertofaria.github.io/v1alpha1
+kind: PavProvisioner
+metadata:
+  name: my-provisioner
+spec:
+  provisioningModes:
+    - Dynamic
+    - Static
+  volumeValidation:
+    podTemplate: &pod
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: container
+            image: ubuntu:20.04
+            command:
+              - /bin/bash
+              - -c
+              - echo foo > /pav/bar
+  volumeCreation:
+    capacity: 1Ei
+    podTemplate: *pod
+  volumeDeletion:
+    podTemplate: *pod
+  volumeStaging:
+    podTemplate:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: container
+            image: ubuntu:20.04
+            command:
+              - /bin/bash
+              - -c
+              - |
+                mkdir /pav/volume &&
+                echo 'Hello, world!' > /pav/volume/greeting &&
+                echo {{ pvc.metadata.name|tobash }} > /pav/volume/pvc-name
+  volumeUnstaging:
+    podTemplate: *pod
+
+# ---------------------------------------------------------------------------- #

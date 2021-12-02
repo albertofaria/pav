@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------- #
+
+# Must first create a Secret named "google-cloud-service-account" in namespace
+# "default" with key "key" set to the Google Cloud service account's JSON key.
+
+# Must also set the project ID in the PersistentVolume below where it says
+# <INSERT PROJECT ID HERE>, and the bucket name where it says <INSERT BUCKET
+# NAME HERE>.
+
+# ---------------------------------------------------------------------------- #
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gcs-bucket-pv
+spec:
+  csi:
+    driver: gcs-provisioner
+    volumeHandle: <INSERT BUCKET NAME HERE>
+    volumeAttributes:
+      projectId: <INSERT PROJECT ID HERE>
+      secretName: google-cloud-service-account
+      secretNamespace: default
+      location: EUROPE-WEST2
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+    - ReadWriteMany
+  capacity:
+    storage: 1Ei
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gcs-bucket-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Ei
+  storageClassName: ""
+  volumeName: gcs-bucket-pv
+
+---
+
+# Exec into this pod and check the /bucket directory.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gcs-test-pod
+spec:
+  terminationGracePeriodSeconds: 0  # ensure that the pod can be deleted quickly
+  containers:
+    - name: container
+      image: ubuntu:20.04
+      command: [ sleep, infinity ]  # wait until pod is manually deleted
+      volumeMounts:
+        - name: bucket
+          mountPath: /bucket
+  volumes:
+    - name: bucket
+      persistentVolumeClaim:
+        claimName: gcs-bucket-pvc
+
+# ---------------------------------------------------------------------------- #

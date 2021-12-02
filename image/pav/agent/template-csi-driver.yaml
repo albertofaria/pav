@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------------------- #
+
+# Template definition of the CSIDriver object that is created when a
+# PavProvisioner is created.
+
+# This file is loaded as a string, then formatted using Python's str.format(),
+# and finally parsed as YAML.
+
+# ---------------------------------------------------------------------------- #
+
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: {provisioner.metadata.name}
+spec:
+  attachRequired: false  # to skip Controller[Publish,Unpublish]Volume()
+  podInfoOnMount: true  # to get client Pod info on NodePublishVolume()
+
+# ---------------------------------------------------------------------------- #

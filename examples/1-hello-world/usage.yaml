@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------- #
+
+# Note that the StorageClass only has to be created once, and can then be used
+# by any number of PVCs.
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: hello-world
+provisioner: hello-world-provisioner
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hello-world-pvc
+spec:
+  storageClassName: hello-world
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+
+# Exec into this pod and check the /hello-world directory.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello-world-test-pod
+spec:
+  terminationGracePeriodSeconds: 0  # ensure that the pod can be deleted quickly
+  containers:
+    - name: container
+      image: ubuntu:20.04
+      command: [ sleep, infinity ]  # wait until pod is manually deleted
+      volumeMounts:
+        - name: hello-world
+          mountPath: /hello-world
+  volumes:
+    - name: hello-world
+      persistentVolumeClaim:
+        claimName: hello-world-pvc
+
+# ---------------------------------------------------------------------------- #

@@ -1,0 +1,408 @@
+# ---------------------------------------------------------------------------- #
+# CRD and internal namespace
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: pavprovisioners.pav.albertofaria.github.io
+spec:
+  group: pav.albertofaria.github.io
+  names:
+    kind: PavProvisioner
+    singular: pavprovisioner
+    plural: pavprovisioners
+    shortNames:
+      - pav
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          x-kubernetes-preserve-unknown-fields: true
+          properties:
+            spec:
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                provisioningModes: &field
+                  x-kubernetes-preserve-unknown-fields: true
+                volumeValidation:
+                  <<: *field
+                  properties:
+                    volumeModes: *field
+                    accessModes: *field
+                    minCapacity: *field
+                    maxCapacity: *field
+                    podTemplate: *field
+                volumeCreation:
+                  <<: *field
+                  properties:
+                    handle: *field
+                    capacity: *field
+                    podTemplate: *field
+                volumeDeletion:
+                  <<: *field
+                  properties:
+                    podTemplate: *field
+                volumeStaging:
+                  <<: *field
+                  properties:
+                    podTemplate: *field
+                volumeUnstaging:
+                  <<: *field
+                  properties:
+                    podTemplate: *field
+            status: *field
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pav
+
+# ---------------------------------------------------------------------------- #
+# RBAC
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pav-controller-agent
+rules:
+  # webhook management
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [mutatingwebhookconfigurations, validatingwebhookconfigurations]
+    verbs: [create, patch]
+  # PavProvisioner management
+  - apiGroups: [pav.albertofaria.github.io]
+    resources: [pavprovisioners, pavprovisioners/status]
+    verbs: [list, patch, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [csidrivers]
+    verbs: [create, delete, get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces, serviceaccounts]
+    verbs: [create]
+  - apiGroups: [apps]
+    resources: [daemonsets, deployments]
+    verbs: [create]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterrolebindings]
+    verbs: [create]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    verbs: [bind]
+    resourceNames: [pav-csi-controller-plugin, pav-csi-node-plugin]
+  # volume creation and deletion
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims, persistentvolumeclaims/status]
+    verbs: [get, list, patch, update, watch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get]
+  - apiGroups: [pav.albertofaria.github.io]
+    resources: [pavprovisioners]
+    verbs: [get]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pav-node-agent
+rules:
+  # volume creation and deletion
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims, persistentvolumeclaims/status]
+    verbs: [get, list, patch, update, watch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [delete, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get]
+  - apiGroups: [pav.albertofaria.github.io]
+    resources: [pavprovisioners]
+    verbs: [get]
+  # volume staging and unstaging
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims, persistentvolumes, nodes]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, delete, get, list, update, watch]
+  - apiGroups: [pav.albertofaria.github.io]
+    resources: [pavprovisioners]
+    verbs: [get]
+  # Jinja template evaluation
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get]
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pav-csi-controller-plugin
+rules:
+  # external-provisioner
+  - apiGroups: [""]
+    resources: [persistentvolumes]
+    verbs: [create, delete, get, list, watch]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, update]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses, csidrivers]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, update, list, patch, watch]
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshots]
+    verbs: [get, list]
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshotcontents]
+    verbs: [get, list]
+  - apiGroups: [storage.k8s.io]
+    resources: [csinodes]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  # Controller.CreateVolume()
+  - apiGroups: [pav.albertofaria.github.io]
+    resources: [pavprovisioners]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, update, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get]
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pav-csi-node-plugin
+rules:
+  # Node.NodePublishVolume()
+  - apiGroups: [pav.albertofaria.github.io]
+    resources: [pavprovisioners]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [persistentvolumes]
+    verbs: [list]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, update, watch]
+  # Node.NodeUnpublishVolume()
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, update, watch]
+
+# ---------------------------------------------------------------------------- #
+# controller agent
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: controller-agent
+  namespace: pav
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pav-controller-agent
+subjects:
+  - kind: ServiceAccount
+    name: controller-agent
+    namespace: pav
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pav-controller-agent
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-agent
+  namespace: pav
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &labels
+      pav.albertofaria.github.io/component: controller-agent
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: controller-agent
+      containers:
+        - name: agent
+          image: &image albertofaria/pav:0.1.0
+          args:
+            - agent
+            - controller
+            - *image
+          ports:
+            - containerPort: 443
+          # This probe waits until the webhook socket is open. This is so users
+          # can reliably wait on the controller agent deployment to be fully
+          # rolled out to know when they will be able to create PavProvisioner
+          # objects without getting a "connection refused" error.
+          startupProbe:
+            tcpSocket:
+              port: 443
+            periodSeconds: 1
+            failureThreshold: 60
+
+# ---------------------------------------------------------------------------- #
+# node agent
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-agent
+  namespace: pav
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pav-node-agent
+subjects:
+  - kind: ServiceAccount
+    name: node-agent
+    namespace: pav
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pav-node-agent
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  namespace: pav
+spec:
+  selector:
+    matchLabels: &labels
+      pav.albertofaria.github.io/component: node-agent
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: node-agent
+      containers:
+        - name: agent
+          image: albertofaria/pav:0.1.0
+          args:
+            - agent
+            - node
+            - $(NODE_NAME)
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: pav-volume-dir
+              mountPath: /var/lib/kubernetes-pav
+              mountPropagation: Bidirectional  # so unmounts propagate to host
+            - name: exported-volume-dir
+              mountPath: /var/lib/kubelet/pods
+      volumes:
+        # where /pav volumes are created
+        - name: pav-volume-dir
+          hostPath:
+            path: /var/lib/kubernetes-pav
+            type: DirectoryOrCreate
+        # where kubelet wants exported volumes to appear
+        - name: exported-volume-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory
+
+# ---------------------------------------------------------------------------- #
+# webhooks
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhooks
+  namespace: pav
+spec:
+  selector:
+    pav.albertofaria.github.io/component: controller-agent
+  ports:
+    - port: 443
+
+---
+
+# The ValidatingWebhookConfiguration is pre-created with a single invalid
+# webhook to ensure that invalid PavProvisioners creations or updates aren't
+# allowed before the controller agent installs the appropriate webhooks, which
+# overwrite this one.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: pav.albertofaria.github.io
+webhooks:
+  - name: invalid.pav.albertofaria.github.io
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: webhooks
+        namespace: pav
+    rules:
+      - apiGroups: [pav.albertofaria.github.io]
+        apiVersions: [v1alpha1]
+        operations: ["*"]
+        resources: [pavprovisioners]
+    sideEffects: None
+
+---
+
+# The MutatingWebhookConfiguration is defined here just so the mutating webhooks
+# set up by the controller agent (kopf sets them up even if we don't specify
+# any) are deleted when PaV is uninstalled.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: pav.albertofaria.github.io
+
+# ---------------------------------------------------------------------------- #
