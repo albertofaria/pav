@@ -333,10 +333,11 @@ def _define_volume_provisioning_handlers(
             )
         )
 
-        pvc_has_other_finalizers = set(body.metadata.get("finalizers", [])) != {
-            f"{DOMAIN}/delete-volume",
-            KOPF_FINALIZER,
-        }
+        finalizers = frozenset(body.metadata.get("finalizers", []))
+
+        pvc_has_other_finalizers = not finalizers.issubset(
+            {f"{DOMAIN}/delete-volume", KOPF_FINALIZER}
+        )
 
         if pvc_is_staged or pvc_has_other_finalizers:
             raise kopf.TemporaryError(
