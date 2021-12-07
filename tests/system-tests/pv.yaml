@@ -4,8 +4,6 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: my-pv
-  labels:
-    pav-test-object: ''
 spec:
   csi:
     driver: my-provisioner
