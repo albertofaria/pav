@@ -79,7 +79,7 @@ def _define_operator_handlers(
         provisioning_handlers = _define_volume_provisioning_handlers(node_name)
 
         provisioning_coroutine = handle_volume_provisioning(
-            api_client, provisioning_handlers
+            api_client, provisioning_handlers, handler_node_name=node_name
         )
 
         create_task(provisioning_coroutine)
