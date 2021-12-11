@@ -29,6 +29,12 @@ class ObjectRef:
     uid: str
 
 
+@dataclass(frozen=True)
+class ClusterObjectRef:
+    name: str
+    uid: str
+
+
 def parse_and_round_quantity(
     quantity: object, *, rounding_mode: str = ROUND_HALF_EVEN
 ) -> int:

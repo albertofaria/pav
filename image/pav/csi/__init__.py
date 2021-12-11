@@ -19,19 +19,22 @@ from pav.csi.spec.csi_pb2_grpc import (
     add_NodeServicer_to_server,
 )
 from pav.shared.config import CSI_SOCKET_PATH
+from pav.shared.kubernetes import ClusterObjectRef
 
 # ---------------------------------------------------------------------------- #
 
 
-def run_controller(provisioner_name: str) -> None:
-    asyncio.run(_run_async(provisioner_name, None))
+def run_controller(provisioner_ref: ClusterObjectRef) -> None:
+    asyncio.run(_run_async(provisioner_ref, None))
 
 
-def run_node(provisioner_name: str, node_name: str) -> None:
-    asyncio.run(_run_async(provisioner_name, node_name))
+def run_node(provisioner_ref: ClusterObjectRef, node_name: str) -> None:
+    asyncio.run(_run_async(provisioner_ref, node_name))
 
 
-async def _run_async(provisioner_name: str, node_name: Optional[str]) -> None:
+async def _run_async(
+    provisioner_ref: ClusterObjectRef, node_name: Optional[str]
+) -> None:
 
     async with ApiClient() as api_client:
 
@@ -40,14 +43,14 @@ async def _run_async(provisioner_name: str, node_name: Optional[str]) -> None:
         server = grpc.aio.server()
         server.add_insecure_port(f"unix://{CSI_SOCKET_PATH}")
 
-        identity = Identity(provisioner_name)
+        identity = Identity(provisioner_ref)
         add_IdentityServicer_to_server(identity, server)
 
         if node_name is None:
-            controller = Controller(api_client, provisioner_name)
+            controller = Controller(api_client, provisioner_ref)
             add_ControllerServicer_to_server(controller, server)
         else:
-            node = Node(api_client, provisioner_name, node_name)
+            node = Node(api_client, provisioner_ref, node_name)
             add_NodeServicer_to_server(node, server)
 
         # set up signal handler to allow for graceful termination

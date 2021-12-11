@@ -262,16 +262,11 @@ def _define_provisioner_handlers(
             )
         )
 
-        def provisioners_used_by_pod(pod: V1Pod) -> list[str]:
-            label: str = pod.metadata.labels[f"{DOMAIN}/uses-provisioners"]
-            return label.split(",")
-
         has_staged_volumes = any(
-            body.metadata.name in provisioners_used_by_pod(pod)
-            and pod.status.phase not in ["Succeeded", "Failed"]
+            pod.status.phase not in ["Succeeded", "Failed"]
             for pod in await get_all_pods(
                 api_client=api_client,
-                label_selector=f"{DOMAIN}/uses-provisioners",
+                label_selector=f"{DOMAIN}/uses-provisioner-{body.metadata.uid}",
             )
         )
 
@@ -319,17 +314,11 @@ def _define_volume_provisioning_handlers(
         assert body.metadata.namespace
         assert body.metadata.uid
 
-        def volumes_used_by_pod(pod: V1Pod) -> list[str]:
-            labels: Mapping[str, str] = pod.metadata.labels or {}
-            return labels[f"{DOMAIN}/uses-volumes"].split(",")
-
         pvc_is_staged = any(
-            body.metadata.uid in volumes_used_by_pod(pod)
-            and pod.status.phase not in ["Succeeded", "Failed"]
+            pod.status.phase not in ["Succeeded", "Failed"]
             for pod in await get_all_pods(
                 api_client=api_client,
-                label_selector=f"{DOMAIN}/uses-volumes",
-                field_selector=f"metadata.namespace={body.metadata.namespace}",
+                label_selector=f"{DOMAIN}/uses-volume-{body.metadata.uid}",
             )
         )
 

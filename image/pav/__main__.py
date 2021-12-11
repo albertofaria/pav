@@ -9,6 +9,7 @@ from kubernetes_asyncio.config import load_incluster_config  # type: ignore
 import pav.agent.controller
 import pav.agent.node
 import pav.csi
+from pav.shared.kubernetes import ClusterObjectRef
 
 # ---------------------------------------------------------------------------- #
 
@@ -19,8 +20,8 @@ def main() -> None:
 
         python -m pav agent controller <image>
         python -m pav agent node <node_name>
-        python -m pav csi-plugin <provisioner_name> controller
-        python -m pav csi-plugin <provisioner_name> node <node_name>
+        python -m pav csi-plugin <provisioner_name> <provisioner_uid> controller
+        python -m pav csi-plugin <provisioner_name> <provisioner_uid> node <node_name>
     """
 
     args = _parse_args()
@@ -36,12 +37,14 @@ def main() -> None:
 
     elif args.mode == "csi-plugin":
 
+        provisioner_ref = ClusterObjectRef(
+            name=args.provisioner_name, uid=args.provisioner_uid
+        )
+
         if args.csi_plugin == "controller":
-            pav.csi.run_controller(provisioner_name=args.provisioner_name)
+            pav.csi.run_controller(provisioner_ref)
         elif args.csi_plugin == "node":
-            pav.csi.run_node(
-                provisioner_name=args.provisioner_name, node_name=args.node_name
-            )
+            pav.csi.run_node(provisioner_ref, node_name=args.node_name)
 
 
 def _parse_args() -> Namespace:
@@ -62,6 +65,7 @@ def _parse_args() -> Namespace:
 
     csi_parser = subparsers.add_parser("csi-plugin")
     csi_parser.add_argument("provisioner_name")
+    csi_parser.add_argument("provisioner_uid")
 
     csi_subparsers = csi_parser.add_subparsers(dest="csi_plugin", required=True)
     csi_subparsers.add_parser("controller")

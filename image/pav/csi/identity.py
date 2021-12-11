@@ -16,17 +16,18 @@ from pav.csi.spec.csi_pb2 import (
     ProbeResponse,
 )
 from pav.csi.spec.csi_pb2_grpc import IdentityServicer
+from pav.shared.kubernetes import ClusterObjectRef
 
 # ---------------------------------------------------------------------------- #
 
 
 class Identity(IdentityServicer):
 
-    provisioner_name: str
+    provisioner_ref: ClusterObjectRef
 
-    def __init__(self, provisioner_name: str) -> None:
+    def __init__(self, provisioner_ref: ClusterObjectRef) -> None:
         super().__init__()
-        self.provisioner_name = provisioner_name
+        self.provisioner_ref = provisioner_ref
 
     @log_grpc
     async def GetPluginInfo(
@@ -34,7 +35,7 @@ class Identity(IdentityServicer):
     ) -> GetPluginInfoResponse:
 
         return GetPluginInfoResponse(
-            name=self.provisioner_name, vendor_version="0.0.0"
+            name=self.provisioner_ref.name, vendor_version="0.0.0"
         )
 
     @log_grpc

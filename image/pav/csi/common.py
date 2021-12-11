@@ -24,6 +24,7 @@ from pav.shared.config import (
     PROVISIONER_PLURAL,
     PROVISIONER_VERSION,
 )
+from pav.shared.kubernetes import ClusterObjectRef
 from pav.shared.util import log
 
 # ---------------------------------------------------------------------------- #
@@ -38,15 +39,19 @@ async def ensure(
 
 
 async def ensure_provisioner_is_not_being_deleted(
-    context: ServicerContext, api_client: ApiClient, provisioner_name: str
+    context: ServicerContext,
+    api_client: ApiClient,
+    provisioner_ref: ClusterObjectRef,
 ) -> None:
 
     provisioner = await CustomObjectsApi(api_client).get_cluster_custom_object(
         group=PROVISIONER_GROUP,
         version=PROVISIONER_VERSION,
         plural=PROVISIONER_PLURAL,
-        name=provisioner_name,
+        name=provisioner_ref.name,
     )
+
+    assert provisioner["metadata"]["uid"] == provisioner_ref.uid
 
     await ensure(
         condition=not provisioner["metadata"].get("deletionTimestamp"),

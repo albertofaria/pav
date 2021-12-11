@@ -34,6 +34,7 @@ from pav.csi.spec.csi_pb2 import (
 from pav.csi.spec.csi_pb2_grpc import ControllerServicer
 from pav.shared.config import DOMAIN
 from pav.shared.kubernetes import (
+    ClusterObjectRef,
     ObjectRef,
     atomically_modify_persistent_volume_claim,
     parse_and_round_quantity,
@@ -51,11 +52,13 @@ from pav.shared.states import (
 class Controller(ControllerServicer):
 
     api_client: ApiClient
-    provisioner_name: str
+    provisioner_ref: ClusterObjectRef
 
-    def __init__(self, api_client: ApiClient, provisioner_name: str) -> None:
+    def __init__(
+        self, api_client: ApiClient, provisioner_ref: ClusterObjectRef
+    ) -> None:
         self.api_client = api_client
-        self.provisioner_name = provisioner_name
+        self.provisioner_ref = provisioner_ref
 
     @log_grpc
     async def ControllerGetCapabilities(
@@ -86,7 +89,7 @@ class Controller(ControllerServicer):
         pvc_namespace = request.parameters["csi.storage.k8s.io/pvc/namespace"]
 
         await ensure_provisioner_is_not_being_deleted(
-            context, self.api_client, self.provisioner_name
+            context, self.api_client, self.provisioner_ref
         )
 
         pvc = await CoreV1Api(
@@ -142,7 +145,7 @@ class Controller(ControllerServicer):
 
         # check provisioner name
 
-        assert self.provisioner_name == sc.provisioner
+        assert self.provisioner_ref.name == sc.provisioner
 
         # check requested volume mode
 
@@ -257,7 +260,7 @@ class Controller(ControllerServicer):
                     pvc.metadata.labels = {}
 
                 pvc.metadata.labels |= {
-                    f"{DOMAIN}/provisioner": self.provisioner_name
+                    f"{DOMAIN}/provisioner": self.provisioner_ref.name
                 }
 
                 if not deletion_requested:

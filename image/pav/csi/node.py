@@ -34,17 +34,18 @@ from pav.csi.spec.csi_pb2 import (
 )
 from pav.csi.spec.csi_pb2_grpc import NodeServicer
 from pav.shared.config import DOMAIN
-from pav.shared.kubernetes import ObjectRef, atomically_modify_pod, watch_pod
+from pav.shared.kubernetes import (
+    ClusterObjectRef,
+    ObjectRef,
+    atomically_modify_pod,
+    watch_pod,
+)
 from pav.shared.states import (
     VolumeStagingState,
     VolumeStagingStateAfterStaged,
     VolumeStagingStates,
 )
-from pav.shared.util import (
-    ensure_empty_or_singleton,
-    ensure_singleton,
-    mutate_value,
-)
+from pav.shared.util import ensure_empty_or_singleton, ensure_singleton
 
 # ---------------------------------------------------------------------------- #
 
@@ -61,15 +62,18 @@ class VolumeStageRef:
 class Node(NodeServicer):
 
     api_client: ApiClient
-    provisioner_name: str
+    provisioner_ref: ClusterObjectRef
     node_name: str
 
     def __init__(
-        self, api_client: ApiClient, provisioner_name: str, node_name: str
+        self,
+        api_client: ApiClient,
+        provisioner_ref: ClusterObjectRef,
+        node_name: str,
     ) -> None:
 
         self.api_client = api_client
-        self.provisioner_name = provisioner_name
+        self.provisioner_ref = provisioner_ref
         self.node_name = node_name
 
     @log_grpc
@@ -92,7 +96,7 @@ class Node(NodeServicer):
     ) -> NodePublishVolumeResponse:
 
         await ensure_provisioner_is_not_being_deleted(
-            context, self.api_client, self.provisioner_name
+            context, self.api_client, self.provisioner_ref
         )
 
         client_pod_ref = ObjectRef(
@@ -154,7 +158,7 @@ class Node(NodeServicer):
         return ensure_singleton(
             pv
             for pv in persistent_volumes.items
-            if pv.spec.csi.driver == self.provisioner_name
+            if pv.spec.csi.driver == self.provisioner_ref.name
             and pv.spec.csi.volume_handle == volume_id
         )
 
@@ -173,7 +177,7 @@ class Node(NodeServicer):
 
         # check provisioner name
 
-        assert self.provisioner_name == pv.spec.csi.driver
+        assert self.provisioner_ref.name == pv.spec.csi.driver
 
         # check requested volume mode
 
@@ -265,19 +269,11 @@ class Node(NodeServicer):
                 if client_pod.metadata.labels is None:
                     client_pod.metadata.labels = {}
 
-                mutate_value(
-                    mapping=client_pod.metadata.labels,
-                    key=f"{DOMAIN}/uses-provisioners",
-                    default_value="",
-                    f=lambda s: (s + "," + self.provisioner_name).strip(","),
-                )
-
-                mutate_value(
-                    mapping=client_pod.metadata.labels,
-                    key=f"{DOMAIN}/uses-volumes",
-                    default_value="",
-                    f=lambda s: (s + "," + pvc_ref.uid).strip(","),
-                )
+                client_pod.metadata.labels |= {
+                    f"{DOMAIN}/uses-provisioner-{self.provisioner_ref.uid}": "",
+                    f"{DOMAIN}/uses-volume-{pvc_ref.uid}": "",
+                    f"{DOMAIN}/uses-volumes": "",
+                }
 
                 if not unstaging_requested:
 
