@@ -261,7 +261,7 @@ spec:
       serviceAccountName: controller-agent
       containers:
         - name: agent
-          image: &image albertofaria/pav:0.1.0
+          image: &image albertofaria/pav:0.1.1
           args:
             - agent
             - controller
@@ -322,7 +322,7 @@ spec:
       serviceAccountName: node-agent
       containers:
         - name: agent
-          image: albertofaria/pav:0.1.0
+          image: albertofaria/pav:0.1.1
           args:
             - agent
             - node

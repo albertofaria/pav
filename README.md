@@ -9,7 +9,7 @@
   </a>
   <!-- latest release as of current commit -->
   <a href="https://github.com/albertofaria/pav/releases">
-    <img src="https://img.shields.io/badge/version-0.1.0-yellow.svg" />
+    <img src="https://img.shields.io/badge/version-0.1.1-yellow.svg" />
   </a>
   <!-- license -->
   <a href="LICENSE.txt">
@@ -47,7 +47,7 @@ For more information on PaV's applicability and design, please see the paper [__
 To install PaV onto a Kubernetes cluster, run:
 
 ```console
-kubectl create -f https://raw.githubusercontent.com/albertofaria/pav/v0.1.0/deployment.yaml
+kubectl create -f https://raw.githubusercontent.com/albertofaria/pav/v0.1.1/deployment.yaml
 ```
 
 It can take a few seconds for PaV's components to start running, during which time the creation of [`PavProvisioner` objects](#pavprovisioner-objects) will fail with a "connection refused" error.
@@ -57,7 +57,7 @@ To uninstall PaV from a Kubernetes cluster, run:
 
 ```console
 kubectl delete crd pavprovisioners.pav.albertofaria.github.io
-kubectl delete --ignore-not-found -f https://raw.githubusercontent.com/albertofaria/pav/v0.1.0/deployment.yaml
+kubectl delete --ignore-not-found -f https://raw.githubusercontent.com/albertofaria/pav/v0.1.1/deployment.yaml
 ```
 
 The first command will cause the deletion of all existing `PavProvisioner` objects and block until they are fully removed.
