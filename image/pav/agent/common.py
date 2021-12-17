@@ -174,7 +174,7 @@ async def handle_volume_provisioning(
                 api_client, handler_node_name, handlers
             )
         except CancelledError:
-            pass
+            break
         except:
             log(format_exc())
             await sleep(AGENT_HANDLER_RETRY_DELAY.total_seconds())
@@ -405,7 +405,7 @@ async def handle_volume_staging(
                 api_client, handler_node_name, handlers
             )
         except CancelledError:
-            pass
+            break
         except:
             log(format_exc())
             await sleep(AGENT_HANDLER_RETRY_DELAY.total_seconds())
